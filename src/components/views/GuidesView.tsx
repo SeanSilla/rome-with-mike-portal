@@ -17,20 +17,48 @@ import {
 } from 'lucide-react';
 
 export const GuidesView: React.FC = () => {
-  const { guides, showToast } = useTourMan();
+  const { guides, currentUser, createGuideAccount, showToast } = useTourMan();
   const [selectedGuide, setSelectedGuide] = useState<Guide | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
   // New guide form state
   const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('guide123');
+  const [newPhone, setNewPhone] = useState('+39 347 ');
   const [newRole, setNewRole] = useState('Certified Tour Guide');
   const [newLanguages, setNewLanguages] = useState('English, Italian');
   const [newRate, setNewRate] = useState(90);
   const [newLicense, setNewLicense] = useState('RM-LIC-099411');
+  const [newBio, setNewBio] = useState('');
+
+  const isMasterAdmin = currentUser?.role === 'admin';
 
   const handleAddGuide = (e: React.FormEvent) => {
     e.preventDefault();
-    showToast(`👤 Added ${newName} to certified guide roster!`);
+    if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) {
+      showToast('⚠️ Please provide guide name, login email, and initial password.');
+      return;
+    }
+
+    createGuideAccount({
+      name: newName.trim(),
+      email: newEmail.trim().toLowerCase(),
+      password: newPassword.trim(),
+      phone: newPhone.trim(),
+      role: newRole.trim() || 'Certified Tour Guide',
+      languages: newLanguages.split(',').map(s => s.trim()).filter(Boolean),
+      baseRatePerTour: newRate || 90,
+      licenseNumber: newLicense.trim() || 'RM-LIC-099411',
+      bio: newBio.trim() || `${newName.trim()} is an official licensed tour guide for Rome With Mike.`
+    });
+
+    // Reset fields
+    setNewName('');
+    setNewEmail('');
+    setNewPassword('guide123');
+    setNewPhone('+39 347 ');
+    setNewBio('');
     setShowAddModal(false);
   };
 
@@ -39,19 +67,26 @@ export const GuidesView: React.FC = () => {
       {/* Header Bar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Certified Guide Directory</h2>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Certified Guide Directory & Accounts</h2>
+            <span className="text-[10px] font-bold uppercase bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded border border-blue-500/20">
+              Admin Control
+            </span>
+          </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Manage your certified local guides, municipal licenses, languages, and payout rates.
+            Create guide login profiles, configure municipal licenses, language pairs, and base rates.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-blue-600/30"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Add Guide Account</span>
-        </button>
+        {isMasterAdmin && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-lg shadow-blue-600/30"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Add Guide Profile & Login</span>
+          </button>
+        )}
       </div>
 
       {/* Guide Cards Grid */}
@@ -86,6 +121,13 @@ export const GuidesView: React.FC = () => {
                   </div>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400">{guide.reviewCount} reviews</span>
                 </div>
+              </div>
+
+              {/* Login Email / Account Badge */}
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 mb-2.5 bg-slate-50 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800">
+                <Mail className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                <span className="font-mono text-slate-700 dark:text-slate-300 truncate">{guide.email}</span>
+                <span className="ml-auto text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 rounded font-bold uppercase">Active</span>
               </div>
 
               {/* Bio snippet */}
@@ -155,10 +197,12 @@ export const GuidesView: React.FC = () => {
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Add Certified Guide</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">Create a staff profile for guide app login and shift assignment.</p>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Add Guide Profile & Login</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+              Master Admin generates portal credentials and assigns guide license permissions.
+            </p>
 
-            <form onSubmit={handleAddGuide} className="space-y-4 text-xs">
+            <form onSubmit={handleAddGuide} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Full Name</label>
                 <input
@@ -171,23 +215,39 @@ export const GuidesView: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Role / Specialization</label>
-                <input
-                  type="text"
-                  value={newRole}
-                  onChange={e => setNewRole(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Login Email</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="guide@romewithmike.com"
+                    value={newEmail}
+                    onChange={e => setNewEmail(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Initial Password</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="guide123"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Languages (comma-separated)</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Phone / WhatsApp</label>
                   <input
                     type="text"
-                    value={newLanguages}
-                    onChange={e => setNewLanguages(e.target.value)}
+                    placeholder="+39 347 123 4567"
+                    value={newPhone}
+                    onChange={e => setNewPhone(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
@@ -203,12 +263,44 @@ export const GuidesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Official Guide License #</label>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Role / Specialization</label>
                 <input
                   type="text"
-                  value={newLicense}
-                  onChange={e => setNewLicense(e.target.value)}
+                  value={newRole}
+                  onChange={e => setNewRole(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Languages (comma-sep)</label>
+                  <input
+                    type="text"
+                    value={newLanguages}
+                    onChange={e => setNewLanguages(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Municipal License #</label>
+                  <input
+                    type="text"
+                    value={newLicense}
+                    onChange={e => setNewLicense(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Bio / Notes</label>
+                <textarea
+                  rows={2}
+                  placeholder="Specialty areas, experience, background..."
+                  value={newBio}
+                  onChange={e => setNewBio(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 resize-none"
                 />
               </div>
 

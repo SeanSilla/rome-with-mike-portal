@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Booking, Tour, Guide, ConciergeChat, ChannelConnection, OTASource } from '../types';
-import { MOCK_TOURS, MOCK_GUIDES, INITIAL_BOOKINGS, MOCK_CHANNELS, MOCK_CHATS } from '../mockData/mockData';
+import { Booking, Tour, Guide, ConciergeChat, ChannelConnection, OTASource, UserAccount } from '../types';
+import { MOCK_TOURS, MOCK_GUIDES, INITIAL_BOOKINGS, MOCK_CHANNELS, MOCK_CHATS, MOCK_USERS } from '../mockData/mockData';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -8,6 +8,19 @@ interface TourManContextType {
   // Theme (Light, Dark, System)
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
+
+  // Authentication & Guide Accounts
+  users: UserAccount[];
+  currentUser: UserAccount | null;
+  login: (usernameOrEmail: string, password: string) => { success: boolean; error?: string };
+  logout: () => void;
+  switchUser: (userId: string) => void;
+  updateUserProfile: (userId: string, updates: { displayName?: string; password?: string; phone?: string; languages?: string[] }) => void;
+  createGuideAccount: (data: { name: string; email: string; password: string; role?: string; languages: string[]; baseRatePerTour: number; licenseNumber: string; phone?: string; bio?: string }) => Guide;
+  showLoginModal: boolean;
+  setShowLoginModal: (show: boolean) => void;
+  showProfileModal: boolean;
+  setShowProfileModal: (show: boolean) => void;
 
   // Navigation & Mode
   activeMode: 'landing' | 'app';
@@ -41,7 +54,7 @@ interface TourManContextType {
   toastMessage: string | null;
   showToast: (msg: string) => void;
 
-  // PWA Modal
+  // PWA & Modals
   showPwaModal: boolean;
   setShowPwaModal: (show: boolean) => void;
   showNewBookingModal: boolean;
@@ -56,8 +69,38 @@ export const TourManProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [selectedTourId, setSelectedTourId] = useState<string>('tour-1');
   const [selectedDate, setSelectedDate] = useState<string>('2026-10-28');
 
+  // Users & Authentication State
+  const [users, setUsers] = useState<UserAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem('rwm_users');
+      return saved ? JSON.parse(saved) : MOCK_USERS;
+    } catch {
+      return MOCK_USERS;
+    }
+  });
+
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    try {
+      const saved = localStorage.getItem('rwm_current_user');
+      return saved ? JSON.parse(saved) : MOCK_USERS[0]; // Defaults to Mighty Mike (Admin)
+    } catch {
+      return MOCK_USERS[0];
+    }
+  });
+
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
+  const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+
+  // Core Data
   const [tours, setTours] = useState<Tour[]>(MOCK_TOURS);
-  const [guides, setGuides] = useState<Guide[]>(MOCK_GUIDES);
+  const [guides, setGuides] = useState<Guide[]>(() => {
+    try {
+      const saved = localStorage.getItem('rwm_guides');
+      return saved ? JSON.parse(saved) : MOCK_GUIDES;
+    } catch {
+      return MOCK_GUIDES;
+    }
+  });
   const [bookings, setBookings] = useState<Booking[]>(INITIAL_BOOKINGS);
   const [channels, setChannels] = useState<ChannelConnection[]>(MOCK_CHANNELS);
   const [chats, setChats] = useState<ConciergeChat[]>(MOCK_CHATS);
@@ -101,6 +144,23 @@ export const TourManProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
+  // Persist Users & Guides
+  useEffect(() => {
+    localStorage.setItem('rwm_users', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('rwm_guides', JSON.stringify(guides));
+  }, [guides]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('rwm_current_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('rwm_current_user');
+    }
+  }, [currentUser]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -108,6 +168,122 @@ export const TourManProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }, 4000);
   };
 
+  // Auth Operations
+  const login = (usernameOrEmail: string, pass: string) => {
+    const trimmed = usernameOrEmail.trim().toLowerCase();
+    const user = users.find(u => 
+      u.email.toLowerCase() === trimmed || 
+      u.username.toLowerCase() === trimmed
+    );
+
+    if (!user) {
+      return { success: false, error: 'User account not found. Please check your username or email.' };
+    }
+
+    if (user.password !== pass) {
+      return { success: false, error: 'Incorrect password. Please try again.' };
+    }
+
+    setCurrentUser(user);
+    setShowLoginModal(false);
+    showToast(`👋 Welcome back, ${user.displayName} (${user.role === 'admin' ? 'Master Admin' : 'Certified Guide'})!`);
+    return { success: true };
+  };
+
+  const logout = () => {
+    setCurrentUser(null);
+    setShowLoginModal(true);
+    showToast('🔒 Signed out successfully.');
+  };
+
+  const switchUser = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setCurrentUser(user);
+      showToast(`🔄 Switched active session to ${user.displayName} (${user.role.toUpperCase()})`);
+    }
+  };
+
+  const updateUserProfile = (userId: string, updates: { displayName?: string; password?: string; phone?: string; languages?: string[] }) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== userId) return u;
+      const updated = {
+        ...u,
+        displayName: updates.displayName?.trim() || u.displayName,
+        password: updates.password?.trim() || u.password,
+        phone: updates.phone?.trim() || u.phone
+      };
+
+      // If current user is being updated, sync
+      if (currentUser?.id === userId) {
+        setCurrentUser(updated);
+      }
+      return updated;
+    }));
+
+    // If guide display name changed, sync in guide roster
+    if (updates.displayName) {
+      const targetUser = users.find(u => u.id === userId);
+      const gId = targetUser?.guideId || userId;
+      setGuides(prev => prev.map(g => g.id === gId ? { ...g, name: updates.displayName! } : g));
+    }
+
+    showToast('✅ Account credentials and profile updated successfully!');
+  };
+
+  const createGuideAccount = (data: { 
+    name: string; 
+    email: string; 
+    password: string; 
+    role?: string; 
+    languages: string[]; 
+    baseRatePerTour: number; 
+    licenseNumber: string; 
+    phone?: string; 
+    bio?: string 
+  }): Guide => {
+    const newId = `usr_${data.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Math.floor(100 + Math.random() * 900)}`;
+    const username = data.email.split('@')[0].toLowerCase();
+
+    const newGuide: Guide = {
+      id: newId,
+      name: data.name,
+      role: data.role || 'Certified Local Guide',
+      email: data.email,
+      phone: data.phone || '+39 06 1234 5678',
+      avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80`,
+      languages: data.languages.length > 0 ? data.languages : ['English', 'Italian'],
+      rating: 5.0,
+      reviewCount: 0,
+      totalTours: 0,
+      licenseNumber: data.licenseNumber || `RM-LIC-${Math.floor(100000 + Math.random() * 900000)}`,
+      baseRatePerTour: data.baseRatePerTour || 95,
+      availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+      status: 'available',
+      bio: data.bio || `Certified Roman guide with official municipal badge.`
+    };
+
+    const newUser: UserAccount = {
+      id: newId,
+      username,
+      email: data.email,
+      password: data.password || 'guide123',
+      displayName: data.name,
+      role: 'guide',
+      guideId: newId,
+      avatar: newGuide.avatar,
+      phone: newGuide.phone,
+      licenseNumber: newGuide.licenseNumber
+    };
+
+    setGuides(prev => [newGuide, ...prev]);
+    setUsers(prev => [newUser, ...prev]);
+
+    showToast(`👤 Guide profile & login created for ${data.name}! Password: ${newUser.password}`);
+    return newGuide;
+  };
+
+  // Booking & Operations Actions
   const checkInBooking = (bookingId: string) => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -121,91 +297,113 @@ export const TourManProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return b;
     }));
-    showToast(`✅ Guest checked in successfully!`);
+    showToast(`✓ Guest checked in successfully.`);
   };
 
   const markNoShow = (bookingId: string) => {
     setBookings(prev => prev.map(b => {
       if (b.id === bookingId) {
-        return { ...b, status: 'no_show' };
+        return {
+          ...b,
+          status: 'no_show'
+        };
       }
       return b;
     }));
-    showToast(`⚠️ Marked as No-Show.`);
+    showToast(`⚠️ Booking marked as No-Show.`);
   };
 
   const resetBookingStatus = (bookingId: string) => {
     setBookings(prev => prev.map(b => {
       if (b.id === bookingId) {
-        return { ...b, status: 'confirmed', checkInTime: undefined };
+        return {
+          ...b,
+          status: 'confirmed',
+          checkInTime: undefined
+        };
       }
       return b;
     }));
-    showToast(`🔄 Status reset to Confirmed.`);
+    showToast(`Booking status reset to Confirmed.`);
   };
 
   const addBooking = (newBookingData: Omit<Booking, 'id' | 'createdAt'>): Booking => {
     const newBooking: Booking = {
       ...newBookingData,
-      id: `b-${Date.now()}`,
+      id: `b-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       createdAt: new Date().toISOString()
     };
     setBookings(prev => [newBooking, ...prev]);
-    showToast(`🎉 New booking added: ${newBooking.customerName} (${newBooking.pax} pax)`);
+    showToast(`🎉 Reservation ${newBooking.reference} created and synced!`);
     return newBooking;
   };
 
   const assignGuideToTour = (tourId: string, time: string, guideId: string) => {
     setBookings(prev => prev.map(b => {
-      if (b.tourId === tourId && b.time === time) {
-        return { ...b, guideId };
+      if (b.tourId === tourId && b.date === selectedDate) {
+        return {
+          ...b,
+          guideId: guideId || undefined
+        };
       }
       return b;
     }));
-    const guideName = guides.find(g => g.id === guideId)?.name || 'Guide';
-    showToast(`👤 Assigned ${guideName} to ${time} tour.`);
+    const guideName = guides.find(g => g.id === guideId)?.name || 'Unassigned';
+    showToast(`📋 Tour scheduled with guide: ${guideName}`);
   };
 
   const autoAssignAllGuides = () => {
     let assigned = 0;
-    // Map tour requirements to guide strengths
-    const mapping: Record<string, string> = {
-      'tour-1': 'guide-1', // Marco Rossi (Colosseum Archaeology)
-      'tour-2': 'guide-2', // Elena Bianchi (Vatican Art)
-      'tour-3': 'guide-3', // Matteo Romano (Trastevere Food)
-      'tour-4': 'guide-5', // Luca Moretti (E-Bike)
-      'tour-5': 'guide-4'  // Sophie Dubois (Tuscan Day Trip)
-    };
+    const unassignedBookings = bookings.filter(b => !b.guideId && b.date === selectedDate);
+    
+    if (unassignedBookings.length === 0) {
+      showToast(`All tours for ${selectedDate} already have assigned guides!`);
+      return { assignedCount: 0 };
+    }
 
     setBookings(prev => prev.map(b => {
-      if (!b.guideId && mapping[b.tourId]) {
+      if (!b.guideId && b.date === selectedDate) {
         assigned++;
-        return { ...b, guideId: mapping[b.tourId] };
+        // Smart matching logic
+        const tour = tours.find(t => t.id === b.tourId);
+        const reqLangs = tour?.languages || ['English'];
+        
+        // Find best guide matching language
+        const matchedGuide = guides.find(g => 
+          g.languages.some(l => reqLangs.includes(l)) && g.status === 'available'
+        ) || guides[assigned % guides.length];
+
+        return {
+          ...b,
+          guideId: matchedGuide?.id || guides[0].id
+        };
       }
       return b;
     }));
 
-    showToast(`⚡ Smart Auto-Assignment completed! ${assigned > 0 ? `${assigned} tours assigned.` : 'All active tours already staffed!'}`);
+    showToast(`⚡ AI Auto-assigned ${assigned} tours to certified guides!`);
     return { assignedCount: assigned };
   };
 
   const sendChatMessage = (chatId: string, text: string, sender: 'operator' | 'ai' | 'guest' = 'operator') => {
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newMsg = {
-      id: `msg-${Date.now()}`,
-      sender,
-      text,
-      time: timeStr
-    };
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     setChats(prev => prev.map(c => {
       if (c.id === chatId) {
         return {
           ...c,
           lastMessage: text,
-          timestamp: timeStr,
-          status: sender === 'ai' ? 'ai_handled' : 'resolved',
-          messages: [...c.messages, newMsg]
+          timestamp: 'Just now',
+          messages: [
+            ...c.messages,
+            {
+              id: `msg-${Date.now()}`,
+              sender,
+              text,
+              time: timeStr
+            }
+          ]
         };
       }
       return c;
@@ -213,140 +411,93 @@ export const TourManProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const parseAndImportEmail = (rawEmail: string): { success: boolean; booking?: Booking; error?: string } => {
-    try {
-      let source: OTASource = 'direct';
-      let ref = `IMP-${Math.floor(100000 + Math.random() * 900000)}`;
-      let guestName = 'Valued Guest';
-      let email = 'guest@sync.tourman.app';
-      let phone = '+39 06 6988 2000';
-      let tourId = 'tour-1';
-      let tourTitle = 'Colosseum Underground & Arena Floor VIP Access';
-      let time = '11:00 AM';
-      let date = '2026-10-28';
-      let pax = 2;
-      let amount = 158;
-      let language = 'English';
-      let specialRequirements = '';
-
-      const lower = rawEmail.toLowerCase();
-      if (lower.includes('getyourguide')) {
-        source = 'getyourguide';
-        const refMatch = rawEmail.match(/GYG-\d+/i) || rawEmail.match(/Reference:\s*([A-Z0-9-]+)/i);
-        if (refMatch) ref = refMatch[0].toUpperCase();
-        
-        const guestMatch = rawEmail.match(/Lead Customer:\s*([^\r\n]+)/i);
-        if (guestMatch) guestName = guestMatch[1].trim();
-
-        const emailMatch = rawEmail.match(/Customer Email:\s*([^\r\n]+)/i);
-        if (emailMatch) email = emailMatch[1].trim();
-
-        const phoneMatch = rawEmail.match(/Customer Mobile:\s*([^\r\n]+)/i);
-        if (phoneMatch) phone = phoneMatch[1].trim();
-
-        const paxMatch = rawEmail.match(/(\d+)\s*Adults?/i);
-        if (paxMatch) {
-          pax = parseInt(paxMatch[1]);
-          amount = pax * 79;
-        }
-
-        if (lower.includes('vatican')) {
-          tourId = 'tour-2';
-          tourTitle = 'Vatican Museums, Sistine Chapel & St. Peter’s Basilica';
-          amount = pax * 89;
-        } else if (lower.includes('trastevere') || lower.includes('food')) {
-          tourId = 'tour-3';
-          tourTitle = 'Trastevere Twilight Sunset Food & Wine Tasting';
-          amount = pax * 68;
-        }
-      } else if (lower.includes('viator') || lower.includes('tripadvisor')) {
-        source = 'viator';
-        const refMatch = rawEmail.match(/VIA-[A-Z0-9]+/i) || rawEmail.match(/BR-[A-Z0-9]+/i);
-        if (refMatch) ref = refMatch[0];
-
-        const guestMatch = rawEmail.match(/Lead Traveler:\s*([^\r\n]+)/i);
-        if (guestMatch) guestName = guestMatch[1].trim();
-
-        const contactMatch = rawEmail.match(/Contact:\s*([^\s\/]+)\s*\/\s*([^\r\n]+)/i);
-        if (contactMatch) {
-          email = contactMatch[1].trim();
-          phone = contactMatch[2].trim();
-        }
-
-        const paxMatch = rawEmail.match(/(\d+)\s*Travelers?/i);
-        if (paxMatch) {
-          pax = parseInt(paxMatch[1]);
-        }
-
-        if (lower.includes('vatican')) {
-          tourId = 'tour-2';
-          tourTitle = 'Vatican Museums, Sistine Chapel & St. Peter’s Basilica';
-          time = '01:30 PM';
-          amount = pax * 89;
-        }
-      } else if (lower.includes('airbnb')) {
-        source = 'airbnb';
-        const refMatch = rawEmail.match(/AIR-[A-Z0-9]+/i) || rawEmail.match(/Code:\s*([A-Z0-9-]+)/i);
-        if (refMatch) ref = refMatch[1] ? `AIR-${refMatch[1]}` : refMatch[0];
-
-        const guestMatch = rawEmail.match(/Guest:\s*([^\r\n]+)/i);
-        if (guestMatch) guestName = guestMatch[1].trim();
-
-        const paxMatch = rawEmail.match(/(\d+)\s*Guests?/i);
-        if (paxMatch) {
-          pax = parseInt(paxMatch[1]);
-          amount = pax * 68;
-        }
-
-        tourId = 'tour-3';
-        tourTitle = 'Trastevere Twilight Sunset Food & Wine Tasting';
-        time = '05:30 PM';
-
-        const dietaryMatch = rawEmail.match(/Dietary[^:]*:\s*"([^"]+)"/i);
-        if (dietaryMatch) specialRequirements = dietaryMatch[1];
-      }
-
-      const importedBooking: Booking = {
-        id: `b-sync-${Date.now()}`,
-        reference: ref,
-        source,
-        customerName: guestName,
-        customerEmail: email,
-        customerPhone: phone,
-        tourId,
-        tourTitle,
-        date,
-        time,
-        pax,
-        adults: pax,
-        children: 0,
-        language,
-        amount,
-        currency: 'EUR',
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        specialRequirements: specialRequirements || undefined,
-        guideId: tourId === 'tour-1' ? 'guide-1' : tourId === 'tour-2' ? 'guide-2' : 'guide-3',
-        createdAt: new Date().toISOString()
-      };
-
-      setBookings(prev => [importedBooking, ...prev]);
-      showToast(`⚡ Parsed and synced booking ${importedBooking.reference} (${importedBooking.source.toUpperCase()})!`);
-      return { success: true, booking: importedBooking };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Failed to parse confirmation email format.' };
+    if (!rawEmail || rawEmail.trim().length < 20) {
+      return { success: false, error: 'Email text is too short or empty.' };
     }
+
+    let source: OTASource = 'getyourguide';
+    if (rawEmail.toLowerCase().includes('viator') || rawEmail.toLowerCase().includes('tripadvisor')) {
+      source = 'viator';
+    } else if (rawEmail.toLowerCase().includes('airbnb')) {
+      source = 'airbnb';
+    }
+
+    // Name extraction
+    let customerName = 'Guest Traveler';
+    const nameMatch = rawEmail.match(/(?:Lead Traveler|Guest Name|Primary Traveler|Booked by):\s*([A-Za-z\s]+)/i);
+    if (nameMatch && nameMatch[1]) {
+      customerName = nameMatch[1].trim();
+    } else {
+      const names = ['Michael Brown', 'Sophia Wilson', 'Alexander Koch', 'Claire Dupont', 'David Chen'];
+      customerName = names[Math.floor(Math.random() * names.length)];
+    }
+
+    // Reference extraction
+    let reference = `${source.substring(0, 3).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
+    const refMatch = rawEmail.match(/(?:Reference|Booking reference|Confirmation code|Code):\s*([A-Z0-9\-]+)/i);
+    if (refMatch && refMatch[1]) {
+      reference = refMatch[1].trim();
+    }
+
+    // Pax extraction
+    let pax = 2;
+    const paxMatch = rawEmail.match(/(?:Guests|Participants|Pax|Quantity|Tickets):\s*(\d+)/i);
+    if (paxMatch && paxMatch[1]) {
+      pax = parseInt(paxMatch[1], 10);
+    }
+
+    // Tour assignment
+    let matchedTour = tours[0];
+    if (rawEmail.toLowerCase().includes('vatican') || rawEmail.toLowerCase().includes('sistine')) {
+      matchedTour = tours.find(t => t.id === 'tour-2') || tours[0];
+    } else if (rawEmail.toLowerCase().includes('food') || rawEmail.toLowerCase().includes('trastevere') || rawEmail.toLowerCase().includes('wine')) {
+      matchedTour = tours.find(t => t.id === 'tour-3') || tours[0];
+    }
+
+    const newBooking: Booking = {
+      id: `b-parsed-${Date.now()}`,
+      reference,
+      source,
+      customerName,
+      customerEmail: `${customerName.toLowerCase().replace(/[^a-z]/g, '.')}@gmail.com`,
+      customerPhone: '+1 555 ' + Math.floor(100 + Math.random() * 900) + ' ' + Math.floor(1000 + Math.random() * 9000),
+      tourId: matchedTour.id,
+      tourTitle: matchedTour.title,
+      date: selectedDate,
+      time: matchedTour.departureTimes[0] || '10:00 AM',
+      pax,
+      adults: pax,
+      children: 0,
+      language: 'English',
+      amount: pax * matchedTour.pricePerPerson,
+      currency: 'EUR',
+      status: 'confirmed',
+      paymentStatus: 'paid',
+      guideId: matchedTour.id === 'tour-1' ? 'usr_alain_piredda' : matchedTour.id === 'tour-2' ? 'usr_amanda_karr' : undefined,
+      createdAt: new Date().toISOString()
+    };
+
+    setBookings(prev => [newBooking, ...prev]);
+    showToast(`⚡ Ingested new reservation from ${source.toUpperCase()}: ${customerName} (${pax} Pax)!`);
+    return { success: true, booking: newBooking };
   };
 
   const triggerSimulatedBooking = (): Booking => {
-    const randomGuestNames = [
-      'Sebastian Müller', 'Eleanor Vance', 'Matteo Colombo', 'Camille Laurent', 
-      'Alejandro Gomez', 'Emily Thorne', 'David Sterling', 'Yuki Takahashi'
+    const sources: OTASource[] = ['getyourguide', 'viator', 'airbnb', 'direct'];
+    const names = [
+      'Liam Gallagher',
+      'Emma Watson',
+      'Giovanni Rossi',
+      'Isabella Garcia',
+      'Oliver Schmidt',
+      'Charlotte Dubois',
+      'Lucas Silva'
     ];
-    const chosenName = randomGuestNames[Math.floor(Math.random() * randomGuestNames.length)];
-    const sources: OTASource[] = ['getyourguide', 'viator', 'airbnb', 'direct', 'guruwalk'];
-    const chosenSource = sources[Math.floor(Math.random() * sources.length)];
+
     const randomTour = tours[Math.floor(Math.random() * tours.length)];
     const randomTime = randomTour.departureTimes[Math.floor(Math.random() * randomTour.departureTimes.length)];
+    const chosenSource = sources[Math.floor(Math.random() * sources.length)];
+    const chosenName = names[Math.floor(Math.random() * names.length)];
     const pax = Math.floor(Math.random() * 3) + 1;
 
     const newBooking: Booking = {
@@ -368,7 +519,7 @@ export const TourManProvider: React.FC<{ children: React.ReactNode }> = ({ child
       currency: 'EUR',
       status: 'confirmed',
       paymentStatus: 'paid',
-      guideId: randomTour.id === 'tour-1' ? 'guide-1' : randomTour.id === 'tour-2' ? 'guide-2' : undefined,
+      guideId: randomTour.id === 'tour-1' ? 'usr_alain_piredda' : randomTour.id === 'tour-2' ? 'usr_amanda_karr' : 'guide-1',
       createdAt: new Date().toISOString()
     };
 
@@ -409,7 +560,18 @@ export const TourManProvider: React.FC<{ children: React.ReactNode }> = ({ child
         showPwaModal,
         setShowPwaModal,
         showNewBookingModal,
-        setShowNewBookingModal
+        setShowNewBookingModal,
+        users,
+        currentUser,
+        login,
+        logout,
+        switchUser,
+        updateUserProfile,
+        createGuideAccount,
+        showLoginModal,
+        setShowLoginModal,
+        showProfileModal,
+        setShowProfileModal
       }}
     >
       {children}

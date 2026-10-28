@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTourMan } from '../../context/TourManContext';
 import { 
   MIKE_TOURS, 
   MIKE_GUIDES, 
@@ -20,21 +21,51 @@ import {
   CheckCircle2, 
   Sparkles, 
   FileText, 
-  RefreshCw,
-  Building2,
-  TrendingUp
+  RefreshCw, 
+  Building2, 
+  TrendingUp, 
+  ShieldCheck, 
+  Copy 
 } from 'lucide-react';
 
 export const MikeCalculatorView: React.FC = () => {
-  const [selectedGuideId, setSelectedGuideId] = useState<string>("usr_alain_piredda");
+  const { currentUser, setShowProfileModal, showToast } = useTourMan();
+  const isSingleGuide = currentUser?.role === 'guide';
+  const myGuideId = isSingleGuide ? (currentUser.guideId || currentUser.id) : "usr_alain_piredda";
+
+  const [selectedGuideId, setSelectedGuideId] = useState<string>(myGuideId);
   const [selectedMonth, setSelectedMonth] = useState<string>("2026-10");
   const [viewMode, setViewMode] = useState<'guide' | 'admin'>('guide');
+  const [viewLayout, setViewLayout] = useState<'auto' | 'cards' | 'table'>('auto');
   const [rows, setRows] = useState<MikeTourRow[]>(INITIAL_CALCULATOR_ROWS);
 
-  const selectedGuide = MIKE_GUIDES.find(g => g.id === selectedGuideId) || MIKE_GUIDES[1];
+  const effectiveGuideId = isSingleGuide ? myGuideId : selectedGuideId;
+  const selectedGuide = MIKE_GUIDES.find(g => g.id === effectiveGuideId) || {
+    id: effectiveGuideId,
+    username: currentUser?.username || 'Guide',
+    displayName: currentUser?.displayName || 'Certified Guide',
+    role: 'guide' as const
+  };
+
+  // Month navigation helpers
+  const handlePrevMonth = () => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const prevDate = new Date(year, month - 2, 1);
+    const y = prevDate.getFullYear();
+    const m = String(prevDate.getMonth() + 1).padStart(2, '0');
+    setSelectedMonth(`${y}-${m}`);
+  };
+
+  const handleNextMonth = () => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const nextDate = new Date(year, month, 1);
+    const y = nextDate.getFullYear();
+    const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+    setSelectedMonth(`${y}-${m}`);
+  };
 
   // Rows for selected guide and month
-  const currentGuideRows = rows.filter(r => r.guideId === selectedGuideId && r.month === selectedMonth);
+  const currentGuideRows = rows.filter(r => r.guideId === effectiveGuideId && r.month === selectedMonth);
 
   // Computations for current guide
   const totalTours = currentGuideRows.length;
@@ -72,7 +103,7 @@ export const MikeCalculatorView: React.FC = () => {
 
   const handleAddRow = () => {
     const newRow = processTourRow({
-      guideId: selectedGuideId,
+      guideId: effectiveGuideId,
       month: selectedMonth,
       date: `${selectedMonth}-15`,
       tour: "Catacombs",
@@ -83,10 +114,22 @@ export const MikeCalculatorView: React.FC = () => {
       notes: "New tour log"
     });
     setRows(prev => [newRow, ...prev]);
+    showToast('➕ Tour row added to your calculation sheet.');
+  };
+
+  const handleDuplicateRow = (row: MikeTourRow) => {
+    const duplicated = processTourRow({
+      ...row,
+      id: `row_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      notes: row.notes ? `${row.notes} (Copy)` : 'Duplicated tour'
+    });
+    setRows(prev => [duplicated, ...prev]);
+    showToast('📋 Duplicated tour row.');
   };
 
   const handleDeleteRow = (id: string) => {
     setRows(prev => prev.filter(r => r.id !== id));
+    showToast('🗑️ Tour row deleted.');
   };
 
   const handlePrint = () => {
@@ -114,31 +157,38 @@ export const MikeCalculatorView: React.FC = () => {
 
         {/* View Toggle (Guide Calculator vs Master Admin Dashboard) */}
         <div className="flex items-center gap-2">
-          <div className="bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center">
-            <button
-              onClick={() => setViewMode('guide')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                viewMode === 'guide'
-                  ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              Guide Calculator
-            </button>
-            <button
-              onClick={() => setViewMode('admin')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-                viewMode === 'admin'
-                  ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <span>Master Admin View</span>
-              <span className="text-[9px] bg-amber-500/20 text-amber-700 dark:text-amber-300 px-1 rounded">
-                Boss
-              </span>
-            </button>
-          </div>
+          {!isSingleGuide ? (
+            <div className="bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center">
+              <button
+                onClick={() => setViewMode('guide')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  viewMode === 'guide'
+                    ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Guide Calculator
+              </button>
+              <button
+                onClick={() => setViewMode('admin')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                  viewMode === 'admin'
+                    ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span>Master Admin View</span>
+                <span className="text-[9px] bg-amber-500/20 text-amber-700 dark:text-amber-300 px-1 rounded">
+                  Boss
+                </span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-700 dark:text-blue-300 text-xs font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>Isolated Guide Statement</span>
+            </div>
+          )}
 
           <button
             onClick={handlePrint}
@@ -156,303 +206,695 @@ export const MikeCalculatorView: React.FC = () => {
           {/* Guide Selector & Month Control Bar */}
           <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
             <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-              {/* Guide Dropdown */}
-              <div className="w-full sm:w-64">
-                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                  Active Tour Guide
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <select
-                    value={selectedGuideId}
-                    onChange={e => setSelectedGuideId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                  >
-                    {MIKE_GUIDES.map(g => (
-                      <option key={g.id} value={g.id}>
-                        {g.displayName} ({g.role === 'admin' ? 'Boss/Admin' : 'Guide'})
-                      </option>
-                    ))}
-                  </select>
+              {/* Guide Dropdown or Locked Guide Pill */}
+              {isSingleGuide ? (
+                <div className="w-full sm:w-72">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    My Guide Sheet (Strictly Isolated)
+                  </label>
+                  <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+                        {currentUser?.displayName?.slice(0, 2).toUpperCase() || 'GD'}
+                      </div>
+                      <span className="font-bold text-slate-900 dark:text-white truncate">
+                        {currentUser?.displayName || selectedGuide.displayName}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowProfileModal(true)}
+                      className="ml-2 text-[10px] text-blue-600 dark:text-blue-400 font-semibold hover:underline shrink-0"
+                    >
+                      Edit Profile
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="w-full sm:w-64">
+                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Active Tour Guide
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <select
+                      value={selectedGuideId}
+                      onChange={e => setSelectedGuideId(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                    >
+                      {MIKE_GUIDES.map(g => (
+                        <option key={g.id} value={g.id}>
+                          {g.displayName} ({g.role === 'admin' ? 'Boss/Admin' : 'Guide'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
-              {/* Month Selector */}
-              <div className="w-full sm:w-44">
+              {/* Month Selector with Mobile < and > Navigation Arrows */}
+              <div className="w-full sm:w-auto">
                 <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                   Billing Month
                 </label>
-                <input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={e => setSelectedMonth(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                />
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <button
+                    onClick={handlePrevMonth}
+                    className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-base shrink-0"
+                    title="Previous Month"
+                  >
+                    ‹
+                  </button>
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={e => setSelectedMonth(e.target.value)}
+                    className="w-full sm:w-40 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono text-center"
+                  />
+                  <button
+                    onClick={handleNextMonth}
+                    className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200 dark:border-slate-700 flex items-center justify-center font-bold text-base shrink-0"
+                    title="Next Month"
+                  >
+                    ›
+                  </button>
+                </div>
               </div>
             </div>
 
-            <button
-              onClick={handleAddRow}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/30"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ Add Tour Log Row</span>
-            </button>
+            {/* Action Buttons & Mobile Layout Selector */}
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+              <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                <button
+                  onClick={() => setViewLayout('auto')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                    viewLayout === 'auto'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm font-bold'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                  title="Auto adapts: Cards on phone, Table on desktop"
+                >
+                  Auto
+                </button>
+                <button
+                  onClick={() => setViewLayout('cards')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 ${
+                    viewLayout === 'cards'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm font-bold'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                  title="Phone Cards View"
+                >
+                  <span>📱 Cards</span>
+                </button>
+                <button
+                  onClick={() => setViewLayout('table')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 ${
+                    viewLayout === 'table'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm font-bold'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                  title="Full Spreadsheet View"
+                >
+                  <span>📊 Table</span>
+                </button>
+              </div>
+
+              <button
+                onClick={handleAddRow}
+                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/30 min-h-[42px]"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Add Tour</span>
+              </button>
+            </div>
           </div>
 
-          {/* Monthly KPI Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Tours Conducted</span>
-              <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{totalTours}</div>
-              <span className="text-[10px] text-slate-500">In {selectedMonth}</span>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Total Pax</span>
-              <div className="text-xl font-black text-blue-600 dark:text-blue-400 mt-0.5">{totalPax}</div>
-              <span className="text-[10px] text-slate-500">Guests guided</span>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Taxi Reimbursed</span>
-              <div className="text-xl font-black text-slate-800 dark:text-slate-200 mt-0.5">€{totalTaxi}.00</div>
-              <span className="text-[10px] text-slate-500">Hidden Rome taxi</span>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Expenses / Receipts</span>
-              <div className="text-xl font-black text-slate-800 dark:text-slate-200 mt-0.5">€{totalExpenses}.00</div>
-              <span className="text-[10px] text-slate-500">Tickets / tastings</span>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Cash Collected</span>
-              <div className="text-xl font-black text-rose-600 dark:text-rose-400 mt-0.5">-€{totalCollected}.00</div>
-              <span className="text-[10px] text-slate-500">Deducted from fee</span>
-            </div>
-
-            {/* BIG NET PAYOUT HIGHLIGHT */}
-            <div className="bg-gradient-to-br from-emerald-500/10 dark:from-emerald-950/60 to-white dark:to-slate-900 p-3.5 rounded-xl border-2 border-emerald-500/50 shadow-lg col-span-2 sm:col-span-1">
-              <span className="text-[10px] uppercase font-extrabold text-emerald-600 dark:text-emerald-400 block tracking-wider">
-                Net Fee To Be Paid
+          {/* Monthly KPI Summary Cards (Scalable Phone 2-Column Grid) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            <div className="bg-white dark:bg-slate-900 p-3 sm:p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
+                Total Tours
               </span>
-              <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+              <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-0.5">{totalTours}</div>
+              <span className="text-[10px] text-slate-400">In {selectedMonth}</span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-3 sm:p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
+                Total Pax
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 mt-0.5">{totalPax}</div>
+              <span className="text-[10px] text-slate-400">Guests guided</span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-3 sm:p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
+                Taxi Reimbursed
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-200 mt-0.5">€{totalTaxi}.00</div>
+              <span className="text-[10px] text-slate-400">Hidden Rome taxi</span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-3 sm:p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
+                Additional Expenses
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-200 mt-0.5">€{totalExpenses}.00</div>
+              <span className="text-[10px] text-slate-400">Receipts & tickets</span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-3 sm:p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
+                Collected (Deducted)
+              </span>
+              <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 mt-0.5">-€{totalCollected}.00</div>
+              <span className="text-[10px] text-slate-400">Cash in hand</span>
+            </div>
+
+            {/* BIG NET PAYOUT HIGHLIGHT CARD (Full width on mobile col-span-2) */}
+            <div className="bg-gradient-to-br from-emerald-500/10 dark:from-emerald-950/60 to-white dark:to-slate-900 p-3.5 sm:p-4 rounded-2xl border-2 border-emerald-500/50 shadow-lg col-span-2 sm:col-span-1 flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-extrabold text-emerald-600 dark:text-emerald-400 block tracking-wider">
+                Total Fee to be Paid
+              </span>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5 font-mono">
                 €{totalNetFee.toFixed(2)}
               </div>
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold">Total Guide Earnings</span>
-            </div>
-          </div>
-
-          {/* Interactive Calculator Table (Spreadsheet View) */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-500" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                  Monthly Tour Log • {selectedGuide.displayName} ({selectedMonth})
-                </h3>
-              </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                Live formula recalculation active
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold mt-0.5">
+                Total Guide Earnings
               </span>
             </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                  <tr>
-                    <th className="py-3 px-3">Date</th>
-                    <th className="py-3 px-3 min-w-[210px]">Tour Experience</th>
-                    <th className="py-3 px-2 text-center">Paired?</th>
-                    <th className="py-3 px-2 text-center w-16">Pax</th>
-                    <th className="py-3 px-2 text-right">Base</th>
-                    <th className="py-3 px-2 text-right">Add'l/Pax</th>
-                    <th className="py-3 px-2 text-right w-20">Taxi (€)</th>
-                    <th className="py-3 px-2 text-right w-20">Expenses (€)</th>
-                    <th className="py-3 px-2 text-right w-20">Collected (€)</th>
-                    <th className="py-3 px-3 text-right min-w-[110px]">Fee To Be Paid</th>
-                    <th className="py-3 px-3 min-w-[160px]">Notes</th>
-                    <th className="py-3 px-2 text-center w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
-                  {currentGuideRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={12} className="py-12 text-center text-slate-500">
-                        No tour entries recorded for this month yet. Click "+ Add Tour Log Row" above to get started.
-                      </td>
-                    </tr>
-                  ) : (
-                    currentGuideRows.map(row => {
-                      const isExpress = isExpressTour(row.tour);
-                      const isHidden = isHiddenRome(row.tour);
-
-                      return (
-                        <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                          {/* Date */}
-                          <td className="py-2.5 px-3">
-                            <input
-                              type="date"
-                              value={row.date}
-                              onChange={e => handleUpdateRow(row.id, 'date', e.target.value)}
-                              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono"
-                            />
-                          </td>
-
-                          {/* Tour Selector */}
-                          <td className="py-2.5 px-3">
-                            <select
-                              value={row.tour}
-                              onChange={e => handleUpdateRow(row.id, 'tour', e.target.value)}
-                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                            >
-                              {MIKE_TOURS.map(t => (
-                                <option key={t} value={t}>{t}</option>
-                              ))}
-                            </select>
-                          </td>
-
-                          {/* Paired (Express only) */}
-                          <td className="py-2.5 px-2 text-center">
-                            {isExpress ? (
-                              <select
-                                value={row.paired || 'No'}
-                                onChange={e => handleUpdateRow(row.id, 'paired', e.target.value)}
-                                className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-semibold"
-                              >
-                                <option value="No">No</option>
-                                <option value="Yes">Yes (€5/pax)</option>
-                              </select>
-                            ) : (
-                              <span className="text-slate-400 dark:text-slate-600 text-xs">—</span>
-                            )}
-                          </td>
-
-                          {/* Pax */}
-                          <td className="py-2.5 px-2 text-center">
-                            <input
-                              type="number"
-                              min={0}
-                              value={row.pax}
-                              onChange={e => handleUpdateRow(row.id, 'pax', parseInt(e.target.value) || 0)}
-                              className="w-16 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-center text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                            />
-                          </td>
-
-                          {/* Base Fee */}
-                          <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300">
-                            €{row.baseFee}
-                          </td>
-
-                          {/* Per Add'l Pax */}
-                          <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300">
-                            €{row.perAddlPax}
-                          </td>
-
-                          {/* Taxi Fee */}
-                          <td className="py-2.5 px-2 text-right">
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={row.taxiFee}
-                              onChange={e => handleUpdateRow(row.id, 'taxiFee', parseFloat(e.target.value) || 0)}
-                              className={`w-16 bg-slate-50 dark:bg-slate-800 border rounded-lg px-2 py-1 text-xs text-right font-mono focus:outline-none ${
-                                isHidden ? 'border-amber-400 text-amber-600 dark:text-amber-300' : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-400'
-                              }`}
-                            />
-                          </td>
-
-                          {/* Additional Expenses */}
-                          <td className="py-2.5 px-2 text-right">
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={row.additionalExpenses}
-                              onChange={e => handleUpdateRow(row.id, 'additionalExpenses', parseFloat(e.target.value) || 0)}
-                              className="w-16 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-right font-mono text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                            />
-                          </td>
-
-                          {/* Collected Cash */}
-                          <td className="py-2.5 px-2 text-right">
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={row.collected}
-                              onChange={e => handleUpdateRow(row.id, 'collected', parseFloat(e.target.value) || 0)}
-                              className="w-16 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-right font-mono text-rose-600 dark:text-rose-300 focus:outline-none focus:border-blue-500"
-                            />
-                          </td>
-
-                          {/* Fee To Be Paid */}
-                          <td className="py-2.5 px-3 text-right">
-                            <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/20">
-                              €{row.feeToBePaid.toFixed(2)}
-                            </span>
-                          </td>
-
-                          {/* Notes */}
-                          <td className="py-2.5 px-3">
-                            <input
-                              type="text"
-                              placeholder="Notes..."
-                              value={row.notes || ''}
-                              onChange={e => handleUpdateRow(row.id, 'notes', e.target.value)}
-                              className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/80 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-blue-500"
-                            />
-                          </td>
-
-                          {/* Delete */}
-                          <td className="py-2.5 px-2 text-center">
-                            <button
-                              onClick={() => handleDeleteRow(row.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition"
-                              title="Delete row"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Table Footer */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-3">
-              <div className="space-y-1 sm:space-y-0 sm:space-x-4">
-                <span>Catacombs / Hidden Rome: €45 + €10/pax (&gt;2)</span>
-                <span>Express: €35 (or €5/pax paired)</span>
-                <span>PVT Tours: Flat €125</span>
-              </div>
-              <div className="font-bold text-slate-900 dark:text-white text-sm">
-                Total Month Net Payout: <span className="text-emerald-600 dark:text-emerald-400">€{totalNetFee.toFixed(2)} EUR</span>
-              </div>
-            </div>
           </div>
+
+          {/* ======================================================== */}
+          {/* 1. MOBILE PHONE CARD VIEW (Active on phones & small screens) */}
+          {/* ======================================================== */}
+          {(viewLayout === 'cards' || viewLayout === 'auto') && (
+            <div className={`${viewLayout === 'auto' ? 'block md:hidden' : 'block'} space-y-3.5`}>
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <span className="text-xs">📱</span>
+                  <span>Tour Logs ({currentGuideRows.length})</span>
+                </span>
+                <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40 px-2 py-0.5 rounded-full">
+                  Mobile Scalable Cards
+                </span>
+              </div>
+
+              {currentGuideRows.length === 0 ? (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center text-slate-500 shadow-sm">
+                  <Calculator className="w-10 h-10 text-slate-400 mx-auto mb-2 opacity-50" />
+                  <p className="font-bold text-sm text-slate-800 dark:text-slate-200">No tours logged for this month</p>
+                  <p className="text-xs text-slate-400 mt-1">Tap the button below to record your first tour for {selectedMonth}.</p>
+                  <button
+                    onClick={handleAddRow}
+                    className="mt-4 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Add First Tour</span>
+                  </button>
+                </div>
+              ) : (
+                currentGuideRows.map((row, index) => {
+                  const isExpress = isExpressTour(row.tour);
+                  const isHidden = isHiddenRome(row.tour);
+
+                  return (
+                    <div
+                      key={row.id}
+                      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3 relative"
+                    >
+                      {/* Mobile Card Header */}
+                      <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
+                        <span className="text-xs font-extrabold tracking-wider uppercase bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded-lg">
+                          Tour #{index + 1}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleDuplicateRow(row)}
+                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition"
+                            title="Duplicate tour"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRow(row.id)}
+                            className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 transition"
+                            title="Delete tour"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Tour Name Select (Full width) */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                          Tour Name
+                        </label>
+                        <select
+                          value={row.tour}
+                          onChange={e => handleUpdateRow(row.id, 'tour', e.target.value)}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-base sm:text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                        >
+                          {MIKE_TOURS.map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 2-Column Grid: Date & Pax */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            Date
+                          </label>
+                          <input
+                            type="date"
+                            value={row.date}
+                            onChange={e => handleUpdateRow(row.id, 'date', e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-2 text-base sm:text-xs font-mono font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            Pax (Guests)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.pax}
+                            onChange={e => handleUpdateRow(row.id, 'pax', parseInt(e.target.value) || 0)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-base sm:text-xs font-bold text-center text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2-Column Grid: Paired & Taxi */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            Paired? {isExpress && <span className="text-blue-500 font-semibold">(Express)</span>}
+                          </label>
+                          <select
+                            disabled={!isExpress}
+                            value={row.paired || 'No'}
+                            onChange={e => handleUpdateRow(row.id, 'paired', e.target.value)}
+                            className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-base sm:text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 ${!isExpress ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          >
+                            <option value="No">No</option>
+                            <option value="Yes">Yes (€5/pax)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            Taxi Fee (€) {isHidden && <span className="text-amber-500 font-semibold">(Reimb.)</span>}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            disabled={!isHidden}
+                            value={row.taxiFee}
+                            onChange={e => handleUpdateRow(row.id, 'taxiFee', parseFloat(e.target.value) || 0)}
+                            className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-base sm:text-xs font-mono font-semibold text-right text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 ${!isHidden ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2-Column Grid: Base Fee & Add'l Pax Rates */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                          <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            Base Fee
+                          </span>
+                          <span className="text-sm font-extrabold text-slate-900 dark:text-white font-mono">
+                            €{row.baseFee.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                          <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            Add'l Pax Rate
+                          </span>
+                          <span className="text-sm font-extrabold text-slate-900 dark:text-white font-mono">
+                            €{row.perAddlPax.toFixed(2)}/pax
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 2-Column Grid: Expenses & Collected */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            Expenses Added (€)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={row.additionalExpenses}
+                            onChange={e => handleUpdateRow(row.id, 'additionalExpenses', parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-base sm:text-xs font-mono font-semibold text-right text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                            Collected (€)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={row.collected}
+                            onChange={e => handleUpdateRow(row.id, 'collected', parseFloat(e.target.value) || 0)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-base sm:text-xs font-mono font-semibold text-right text-rose-600 dark:text-rose-400 focus:outline-none focus:border-rose-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Notes field */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                          Notes / Details
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Tour notes, guest details..."
+                          value={row.notes || ''}
+                          onChange={e => handleUpdateRow(row.id, 'notes', e.target.value)}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-base sm:text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      {/* Mobile Card Bottom: Net Fee To Be Paid */}
+                      <div className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-500/30 rounded-xl p-3 flex items-center justify-between shadow-sm">
+                        <span className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
+                          Fee to be Paid:
+                        </span>
+                        <span className="text-lg font-black text-emerald-700 dark:text-emerald-400 font-mono">
+                          €{row.feeToBePaid.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* 2. DESKTOP SPREADSHEET TABLE VIEW (Default on md+ screens) */}
+          {/* ======================================================== */}
+          {(viewLayout === 'table' || viewLayout === 'auto') && (
+            <div className={`${viewLayout === 'auto' ? 'hidden md:block' : 'block'} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xl`}>
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-500" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                    Monthly Tour Log Spreadsheet • {selectedGuide.displayName} ({selectedMonth})
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                  Live formula recalculation active
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3 px-3">Date</th>
+                      <th className="py-3 px-3 min-w-[210px]">Tour Experience</th>
+                      <th className="py-3 px-2 text-center">Paired?</th>
+                      <th className="py-3 px-2 text-center w-16">Pax</th>
+                      <th className="py-3 px-2 text-right">Base</th>
+                      <th className="py-3 px-2 text-right">Add'l/Pax</th>
+                      <th className="py-3 px-2 text-right w-20">Taxi (€)</th>
+                      <th className="py-3 px-2 text-right w-20">Expenses (€)</th>
+                      <th className="py-3 px-2 text-right w-20">Collected (€)</th>
+                      <th className="py-3 px-3 text-right min-w-[110px]">Fee To Be Paid</th>
+                      <th className="py-3 px-3 min-w-[160px]">Notes</th>
+                      <th className="py-3 px-2 text-center w-16">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
+                    {currentGuideRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={12} className="py-12 text-center text-slate-500">
+                          No tour entries recorded for this month yet. Click "+ Add Tour" above to get started.
+                        </td>
+                      </tr>
+                    ) : (
+                      currentGuideRows.map(row => {
+                        const isExpress = isExpressTour(row.tour);
+                        const isHidden = isHiddenRome(row.tour);
+
+                        return (
+                          <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                            {/* Date */}
+                            <td className="py-2.5 px-3">
+                              <input
+                                type="date"
+                                value={row.date}
+                                onChange={e => handleUpdateRow(row.id, 'date', e.target.value)}
+                                className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-mono"
+                              />
+                            </td>
+
+                            {/* Tour Selector */}
+                            <td className="py-2.5 px-3">
+                              <select
+                                value={row.tour}
+                                onChange={e => handleUpdateRow(row.id, 'tour', e.target.value)}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                              >
+                                {MIKE_TOURS.map(t => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
+                            </td>
+
+                            {/* Paired (Express only) */}
+                            <td className="py-2.5 px-2 text-center">
+                              {isExpress ? (
+                                <select
+                                  value={row.paired || 'No'}
+                                  onChange={e => handleUpdateRow(row.id, 'paired', e.target.value)}
+                                  className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 font-semibold"
+                                >
+                                  <option value="No">No</option>
+                                  <option value="Yes">Yes (€5/pax)</option>
+                                </select>
+                              ) : (
+                                <span className="text-slate-400 dark:text-slate-600 text-xs">—</span>
+                              )}
+                            </td>
+
+                            {/* Pax */}
+                            <td className="py-2.5 px-2 text-center">
+                              <input
+                                type="number"
+                                min={0}
+                                value={row.pax}
+                                onChange={e => handleUpdateRow(row.id, 'pax', parseInt(e.target.value) || 0)}
+                                className="w-16 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold text-center text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                              />
+                            </td>
+
+                            {/* Base Fee */}
+                            <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300">
+                              €{row.baseFee.toFixed(2)}
+                            </td>
+
+                            {/* Per Add'l Pax */}
+                            <td className="py-2.5 px-2 text-right font-mono text-slate-700 dark:text-slate-300">
+                              €{row.perAddlPax.toFixed(2)}
+                            </td>
+
+                            {/* Taxi Fee */}
+                            <td className="py-2.5 px-2 text-right">
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={row.taxiFee}
+                                onChange={e => handleUpdateRow(row.id, 'taxiFee', parseFloat(e.target.value) || 0)}
+                                className={`w-16 bg-slate-50 dark:bg-slate-800 border rounded-lg px-2 py-1 text-xs text-right font-mono focus:outline-none ${
+                                  isHidden ? 'border-amber-400 text-amber-600 dark:text-amber-300' : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-400'
+                                }`}
+                              />
+                            </td>
+
+                            {/* Additional Expenses */}
+                            <td className="py-2.5 px-2 text-right">
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={row.additionalExpenses}
+                                onChange={e => handleUpdateRow(row.id, 'additionalExpenses', parseFloat(e.target.value) || 0)}
+                                className="w-16 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-right font-mono text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                              />
+                            </td>
+
+                            {/* Collected Cash */}
+                            <td className="py-2.5 px-2 text-right">
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={row.collected}
+                                onChange={e => handleUpdateRow(row.id, 'collected', parseFloat(e.target.value) || 0)}
+                                className="w-16 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs text-right font-mono text-rose-600 dark:text-rose-300 focus:outline-none focus:border-blue-500"
+                              />
+                            </td>
+
+                            {/* Fee To Be Paid */}
+                            <td className="py-2.5 px-3 text-right">
+                              <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/20">
+                                €{row.feeToBePaid.toFixed(2)}
+                              </span>
+                            </td>
+
+                            {/* Notes */}
+                            <td className="py-2.5 px-3">
+                              <input
+                                type="text"
+                                placeholder="Notes..."
+                                value={row.notes || ''}
+                                onChange={e => handleUpdateRow(row.id, 'notes', e.target.value)}
+                                className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/80 rounded-lg px-2 py-1 text-xs text-slate-900 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-blue-500"
+                              />
+                            </td>
+
+                            {/* Actions (Duplicate & Delete) */}
+                            <td className="py-2.5 px-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => handleDuplicateRow(row)}
+                                  className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition"
+                                  title="Duplicate tour"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteRow(row.id)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition"
+                                  title="Delete tour"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table Footer */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-3">
+                <div className="space-y-1 sm:space-y-0 sm:space-x-4">
+                  <span>Catacombs / Hidden Rome: €45 + €10/pax (&gt;2)</span>
+                  <span>Express: €35 (or €5/pax paired)</span>
+                  <span>PVT Tours: Flat €125</span>
+                </div>
+                <div className="font-bold text-slate-900 dark:text-white text-sm">
+                  Total Month Net Payout: <span className="text-emerald-600 dark:text-emerald-400">€{totalNetFee.toFixed(2)} EUR</span>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       ) : (
-        /* MASTER ADMIN SUBMISSIONS DASHBOARD */
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xl p-6">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
+        /* MASTER ADMIN SUBMISSIONS DASHBOARD (Responsive on all screen sizes) */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xl p-4 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-amber-500" />
-                <span>Master Submissions Dashboard • Mighty Mike (The Boss)</span>
+                <span>Master Submissions Dashboard • Mighty Mike</span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Overview of all Rome With Mike guide monthly spreadsheets, total pax, expenses, and net compensations.
+                Overview of all Rome With Mike guide monthly spreadsheets, total pax, expenses, and fee payouts.
               </p>
             </div>
-            <span className="text-xs font-mono bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-lg border border-blue-200 dark:border-blue-500/30 font-bold">
-              Cycle: {selectedMonth}
-            </span>
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 px-3 py-1.5 rounded-xl text-right">
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Total Payout</span>
+                <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                  €{rows.filter(r => r.month === selectedMonth).reduce((s, r) => s + r.feeToBePaid, 0).toFixed(2)}
+                </span>
+              </div>
+              <span className="text-xs font-mono bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-500/30 font-bold">
+                {selectedMonth}
+              </span>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile Phone Cards for Admin Overview (< md screens) */}
+          <div className="block md:hidden space-y-3">
+            {MIKE_GUIDES.filter(g => g.role === 'guide').map(guide => {
+              const gRows = rows.filter(r => r.guideId === guide.id && r.month === selectedMonth);
+              const gTours = gRows.length;
+              const gPax = gRows.reduce((s, r) => s + r.pax, 0);
+              const gTaxi = gRows.reduce((s, r) => s + r.taxiFee, 0);
+              const gExp = gRows.reduce((s, r) => s + r.additionalExpenses, 0);
+              const gCol = gRows.reduce((s, r) => s + r.collected, 0);
+              const gNet = gRows.reduce((s, r) => s + r.feeToBePaid, 0);
+
+              return (
+                <div
+                  key={guide.id}
+                  className="bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
+                        {guide.displayName.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">{guide.displayName}</h4>
+                        <span className="text-[10px] text-slate-500">Certified Guide</span>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      gTours > 0 ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20' : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
+                    }`}>
+                      {gTours > 0 ? 'Submitted' : 'Pending'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Tours / Pax</span>
+                      <strong className="text-slate-900 dark:text-white">{gTours} tours ({gPax} pax)</strong>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Expenses / Taxi</span>
+                      <strong className="text-slate-900 dark:text-white">€{(gExp + gTaxi).toFixed(2)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-500/30 rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase block">Fee Due</span>
+                      <strong className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                        €{gNet.toFixed(2)}
+                      </strong>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedGuideId(guide.id);
+                        setViewMode('guide');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-600/30"
+                    >
+                      Inspect Sheet →
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table View for Admin Overview (>= md screens) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                 <tr>

@@ -112,3 +112,18 @@ export interface ChannelConnection {
   activeBookingsCount: number;
   forwardingAddress?: string;
 }
+
+export type UserRole = 'admin' | 'guide';
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  username: string;
+  password: string;
+  displayName: string;
+  role: UserRole;
+  guideId: string; // Corresponding Guide id
+  avatar: string;
+  phone?: string;
+  licenseNumber?: string;
+}

@@ -5,6 +5,8 @@ import { LandingPage } from './components/LandingPage';
 import { AppWorkspace } from './components/AppWorkspace';
 import { PWAInstallModal } from './components/PWAInstallModal';
 import { NewBookingModal } from './components/NewBookingModal';
+import { LoginModal } from './components/LoginModal';
+import { ProfileModal } from './components/ProfileModal';
 
 const AppContent: React.FC = () => {
   const { activeMode } = useTourMan();
@@ -24,6 +26,8 @@ const AppContent: React.FC = () => {
       {/* Global Modals */}
       <PWAInstallModal />
       <NewBookingModal />
+      <LoginModal />
+      <ProfileModal />
     </div>
   );
 };

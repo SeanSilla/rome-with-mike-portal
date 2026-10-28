@@ -32,19 +32,54 @@ export const LiveManifestView: React.FC = () => {
     resetBookingStatus,
     setShowNewBookingModal,
     showToast,
-    selectedDate
+    selectedDate,
+    currentUser
   } = useTourMan();
+
+  const isSingleGuide = currentUser?.role === 'guide';
+  const currentGuideId = currentUser?.guideId || currentUser?.id;
+
+  // Filter tours list for single guide so they only see their assigned tours
+  const visibleTours = isSingleGuide
+    ? tours.filter(t => bookings.some(b => b.tourId === t.id && b.guideId === currentGuideId))
+    : tours;
+
+  const effectiveTours = visibleTours.length > 0 ? visibleTours : tours;
+  const activeTourId = effectiveTours.some(t => t.id === selectedTourId) 
+    ? selectedTourId 
+    : (effectiveTours[0]?.id || selectedTourId);
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'confirmed' | 'checked_in' | 'no_show'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [whisperHeadsetsGiven, setWhisperHeadsetsGiven] = useState<number>(0);
 
-  const currentTour = tours.find(t => t.id === selectedTourId) || tours[0];
+  const currentTour = tours.find(t => t.id === activeTourId) || tours[0];
 
-  // Filter bookings for this tour and date
-  const tourBookings = bookings.filter(b => b.tourId === selectedTourId && b.date === selectedDate);
-  const assignedGuideId = tourBookings.find(b => b.guideId)?.guideId;
-  const assignedGuide = guides.find(g => g.id === assignedGuideId) || guides[0];
+  // Filter bookings for this tour, date, and isolated to guide if single guide
+  const tourBookings = bookings.filter(b => {
+    if (b.tourId !== activeTourId || b.date !== selectedDate) return false;
+    if (isSingleGuide && b.guideId !== currentGuideId) return false;
+    return true;
+  });
+
+  const assignedGuideId = tourBookings.find(b => b.guideId)?.guideId || (isSingleGuide ? currentGuideId : undefined);
+  const assignedGuide = guides.find(g => g.id === assignedGuideId) || (isSingleGuide ? {
+    id: currentUser?.id || 'guide',
+    name: currentUser?.displayName || 'Guide',
+    role: 'Rome With Mike Certified Guide',
+    email: currentUser?.email || 'guide@romewithmike.com',
+    phone: currentUser?.phone || '+39 347 000 0000',
+    avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
+    languages: ['English', 'Italian'],
+    rating: 5.0,
+    reviewCount: 120,
+    totalTours: 600,
+    licenseNumber: currentUser?.licenseNumber || 'RM-LIC',
+    baseRatePerTour: 90,
+    availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+    status: 'available' as const,
+    bio: ''
+  } : guides[0]);
 
   const filteredBookings = tourBookings.filter(b => {
     const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
@@ -70,18 +105,34 @@ export const LiveManifestView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Role Isolation Banner for Single Guides */}
+      {isSingleGuide && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-blue-800 dark:text-blue-200">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+            <div>
+              <span className="font-bold">Guide Manifest Isolation Active: </span>
+              <span>You are viewing departures and guest rosters strictly assigned to <strong>{currentUser?.displayName}</strong>.</span>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold bg-blue-600 text-white px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 self-start sm:self-auto">
+            Private Guide View
+          </span>
+        </div>
+      )}
+
       {/* Tour Selector & Date Bar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
         <div className="flex-1 w-full md:w-auto">
           <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-            Active Tour Manifest
+            {isSingleGuide ? 'My Assigned Departure Manifest' : 'Active Tour Manifest (Master View)'}
           </label>
           <select
-            value={selectedTourId}
+            value={activeTourId}
             onChange={e => setSelectedTourId(e.target.value)}
             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
           >
-            {tours.map(t => (
+            {effectiveTours.map(t => (
               <option key={t.id} value={t.id}>
                 {t.title} ({t.departureTimes.join(', ')})
               </option>

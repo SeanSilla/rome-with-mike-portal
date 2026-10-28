@@ -43,10 +43,21 @@ export const AppWorkspace: React.FC = () => {
     selectedDate,
     setSelectedDate,
     bookings,
-    toastMessage
+    toastMessage,
+    currentUser,
+    setShowProfileModal,
+    setShowLoginModal
   } = useTourMan();
 
-  const navItems = [
+  const isGuide = currentUser?.role === 'guide';
+
+  const navItems = isGuide ? [
+    { id: 'manifest', label: 'My Live Manifest', icon: UserCheck, badge: 'ASSIGNED' },
+    { id: 'mike-calculator', label: 'My Mike Calculator', icon: Calculator, badge: 'MY FEES' },
+    { id: 'dashboard', label: 'My Daily Overview', icon: LayoutDashboard },
+    { id: 'scheduler', label: 'My Assigned Schedule', icon: Calendar },
+    { id: 'concierge', label: 'AI Concierge & Chat', icon: MessageSquare, badge: 'AI' }
+  ] : [
     { id: 'dashboard', label: 'Operations Dashboard', icon: LayoutDashboard },
     { id: 'manifest', label: 'Live Digital Manifest', icon: UserCheck, badge: 'PWA' },
     { id: 'mike-calculator', label: 'Mike Tours Calculator', icon: Calculator, badge: 'OFFICIAL' },
@@ -180,8 +191,40 @@ export const AppWorkspace: React.FC = () => {
           })}
         </nav>
 
-        {/* Mobile PWA & Help Footer */}
+        {/* Mobile PWA & User Account Footer */}
         <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 space-y-2">
+          {currentUser && (
+            <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.displayName}
+                  className="w-8 h-8 rounded-lg object-cover border border-amber-500/40 shrink-0"
+                />
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
+                    {currentUser.displayName}
+                  </span>
+                  <span className={`text-[9px] font-bold uppercase block leading-none ${
+                    currentUser.role === 'admin' ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'
+                  }`}>
+                    {currentUser.role === 'admin' ? '👑 Master Admin' : '👤 Single Guide'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setShowProfileModal(true)}
+                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                  title="Edit Profile & Password"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => setShowPwaModal(true)}
             className="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-300 dark:border-slate-700/60 transition flex items-center justify-center gap-2"
@@ -199,13 +242,24 @@ export const AppWorkspace: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              Live Agency Workspace • Rome With Mike (Rome, IT)
+              {isGuide 
+                ? `👤 Guide Portal: ${currentUser?.displayName} • Assigned Tours & Calculations` 
+                : '👑 Master Admin: Mighty Mike • Full Agency Operations'}
             </span>
           </div>
 
           <div className="flex items-center gap-2.5">
             {/* Theme Toggle */}
             <ThemeToggle />
+
+            {/* Quick User Switcher Button */}
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 text-xs font-semibold transition flex items-center gap-1.5"
+              title="Switch between Master Admin and Single Guides"
+            >
+              <span>Switch User</span>
+            </button>
 
             <button
               onClick={triggerSimulatedBooking}

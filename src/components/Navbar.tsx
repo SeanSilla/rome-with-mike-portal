@@ -9,7 +9,9 @@ import {
   Globe, 
   ExternalLink, 
   Zap,
-  ArrowRight
+  ArrowRight,
+  User,
+  Key
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -19,7 +21,10 @@ export const Navbar: React.FC = () => {
     triggerSimulatedBooking, 
     setShowPwaModal,
     setShowNewBookingModal,
-    bookings
+    bookings,
+    currentUser,
+    setShowLoginModal,
+    setShowProfileModal
   } = useTourMan();
 
   const totalBookingsCount = bookings.length;
@@ -106,6 +111,49 @@ export const Navbar: React.FC = () => {
           <div className="flex items-center gap-2">
             {/* Theme Toggle (Light / Dark / System) */}
             <ThemeToggle />
+
+            {/* User Account / Role Pill */}
+            {currentUser ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setShowProfileModal(true)}
+                  className="flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 transition"
+                  title="My Account: Click to change name & password"
+                >
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.displayName}
+                    className="w-7 h-7 rounded-lg object-cover border border-amber-500/50"
+                  />
+                  <div className="text-left hidden lg:block">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block leading-none truncate max-w-[120px]">
+                      {currentUser.displayName}
+                    </span>
+                    <span className={`text-[9px] font-bold uppercase leading-none block mt-0.5 ${
+                      currentUser.role === 'admin' ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'
+                    }`}>
+                      {currentUser.role === 'admin' ? '👑 Master Admin' : '👤 Guide'}
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  title="Switch between Master Admin & Guide view"
+                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 transition"
+                >
+                  <Key className="w-3.5 h-3.5 text-amber-500" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow transition flex items-center gap-1.5"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Log In</span>
+              </button>
+            )}
 
             {/* Quick OTA Ping simulator button */}
             <button

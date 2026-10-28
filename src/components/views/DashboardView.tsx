@@ -20,13 +20,20 @@ export const DashboardView: React.FC = () => {
     guides, 
     setCurrentAppTab, 
     setSelectedTourId, 
-    checkInBooking,
+    checkInBooking, 
     triggerSimulatedBooking,
-    selectedDate
+    selectedDate,
+    currentUser
   } = useTourMan();
 
-  // Metrics calculations
-  const todayBookings = bookings.filter(b => b.date === selectedDate);
+  const isSingleGuide = currentUser?.role === 'guide';
+  const currentGuideId = currentUser?.guideId || currentUser?.id;
+
+  // Metrics calculations (isolated if single guide)
+  const todayBookings = isSingleGuide
+    ? bookings.filter(b => b.date === selectedDate && b.guideId === currentGuideId)
+    : bookings.filter(b => b.date === selectedDate);
+
   const totalPaxToday = todayBookings.reduce((sum, b) => sum + b.pax, 0);
   const checkedInPax = todayBookings
     .filter(b => b.status === 'checked_in')
@@ -34,15 +41,35 @@ export const DashboardView: React.FC = () => {
   const totalRevenueToday = todayBookings.reduce((sum, b) => sum + b.amount, 0);
   const checkInRate = totalPaxToday > 0 ? Math.round((checkedInPax / totalPaxToday) * 100) : 0;
 
-  // Active tour departures today
-  const departures = tours.map(tour => {
+  // Active tour departures today (isolated if single guide)
+  const visibleTours = isSingleGuide
+    ? tours.filter(tour => bookings.some(b => b.tourId === tour.id && b.guideId === currentGuideId))
+    : tours;
+
+  const departures = visibleTours.map(tour => {
     const tourBookings = todayBookings.filter(b => b.tourId === tour.id);
     const tourPax = tourBookings.reduce((sum, b) => sum + b.pax, 0);
     const checkedPax = tourBookings
       .filter(b => b.status === 'checked_in')
       .reduce((sum, b) => sum + b.pax, 0);
-    const assignedGuideId = tourBookings.find(b => b.guideId)?.guideId;
-    const assignedGuide = guides.find(g => g.id === assignedGuideId);
+    const assignedGuideId = tourBookings.find(b => b.guideId)?.guideId || (isSingleGuide ? currentGuideId : undefined);
+    const assignedGuide = guides.find(g => g.id === assignedGuideId) || (isSingleGuide ? {
+      id: currentUser?.id || 'guide',
+      name: currentUser?.displayName || 'Guide',
+      role: 'Rome With Mike Certified Guide',
+      email: currentUser?.email || 'guide@romewithmike.com',
+      phone: currentUser?.phone || '+39 347 000 0000',
+      avatar: currentUser?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
+      languages: ['English', 'Italian'],
+      rating: 5.0,
+      reviewCount: 120,
+      totalTours: 600,
+      licenseNumber: currentUser?.licenseNumber || 'RM-LIC',
+      baseRatePerTour: 90,
+      availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+      status: 'available' as const,
+      bio: ''
+    } : undefined);
 
     return {
       tour,
